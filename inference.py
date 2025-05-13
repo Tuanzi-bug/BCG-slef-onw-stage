@@ -512,6 +512,9 @@ class Predictor:
         all_peak_indices = []
         all_signals = []
         
+        # 记录推理开始时间
+        start_time = time.time()
+        
         # 开始推理
         for i in tqdm(range(len(dataset)), desc="推理进度"):
             sample_data = dataset[i]
@@ -524,9 +527,17 @@ class Predictor:
             all_peak_indices.append(selected_peaks)
             all_signals.append(sample_data['signal'])
         
+        # 计算推理时间
+        inference_time = time.time() - start_time
+        avg_inference_time = inference_time / len(dataset)
+        
         # 转换为NumPy数组
         all_hr_preds = np.array(all_hr_preds)
         all_hr_targets = np.array(all_hr_targets)
+        
+        # 记录推理时间到TensorBoard
+        self.writer.add_scalar(f'single_file/{file_basename}/avg_inference_time', avg_inference_time, 0)
+        self.writer.add_scalar(f'single_file/{file_basename}/total_inference_time', inference_time, 0)
         
         # 计算评估指标（如果有ground truth）
         results = {}
@@ -535,8 +546,16 @@ class Predictor:
             print("\n===== 推理结果 =====")
             for key, value in results.items():
                 print(f"{key}: {value:.4f}")
+                # 记录指标到TensorBoard
+                self.writer.add_scalar(f'single_file/{file_basename}/metrics/{key}', value, 0)
         else:
             print("没有提供标签，无法计算评估指标")
+        
+        # 记录预测统计到TensorBoard
+        self.writer.add_scalar(f'single_file/{file_basename}/predictions/mean_hr', np.mean(all_hr_preds), 0)
+        self.writer.add_scalar(f'single_file/{file_basename}/predictions/std_hr', np.std(all_hr_preds), 0)
+        self.writer.add_scalar(f'single_file/{file_basename}/predictions/min_hr', np.min(all_hr_preds), 0)
+        self.writer.add_scalar(f'single_file/{file_basename}/predictions/max_hr', np.max(all_hr_preds), 0)
         
         # 保存预测结果
         self._save_single_file_predictions(
@@ -546,21 +565,38 @@ class Predictor:
         
         # 随机选择样本进行可视化
         num_vis = visualize_samples if visualize_samples else self.config.visualize_samples
-        self._visualize_single_file_samples(
+        vis_figs = self._visualize_single_file_samples(
             all_signals, all_peak_indices, all_hr_preds, 
-            all_hr_targets, result_dir, num_vis
+            all_hr_targets, result_dir, num_vis, file_basename
         )
         
         # 如果有ground truth，绘制回归图
         if dataset.labels is not None:
             self._plot_regression_single_file(
-                all_hr_preds, all_hr_targets, result_dir
+                all_hr_preds, all_hr_targets, result_dir, file_basename
             )
+        
+        # 绘制预测分布直方图并记录到TensorBoard
+        fig = plt.figure(figsize=(10, 6))
+        plt.hist(all_hr_preds, bins=30, alpha=0.7, label='Predictions')
+        if dataset.labels is not None and all_hr_targets[0] != 0:
+            plt.hist(all_hr_targets, bins=30, alpha=0.7, label='Ground Truth')
+            plt.legend()
+        plt.title(f'Heart Rate Distribution - {file_basename}')
+        plt.xlabel('Heart Rate (BPM)')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        self.writer.add_figure(f'single_file/{file_basename}/hr_distribution', fig, 0)
+        plt.close(fig)
         
         # 保存结果摘要
         summary = {
             'file_path': signal_path,
             'num_samples': len(dataset),
+            'inference_time': {
+                'total': float(inference_time),
+                'average_per_sample': float(avg_inference_time)
+            },
             'predictions': {
                 'mean_hr': float(np.mean(all_hr_preds)),
                 'std_hr': float(np.std(all_hr_preds)),
@@ -577,6 +613,7 @@ class Predictor:
             json.dump(summary, f, indent=2)
         
         print(f"\n结果已保存到: {result_dir}")
+        print(f"TensorBoard日志已记录到: {self.config.log_dir}")
         
         return all_hr_preds, all_peak_indices
     
@@ -751,13 +788,16 @@ class Predictor:
         self.writer.close()
     
     def _visualize_single_file_samples(self, signals, peak_indices, predictions, 
-                                       targets, result_dir, num_samples):
+                                       targets, result_dir, num_samples, file_basename):
         """可视化随机选择的样本"""
         total_samples = len(signals)
         num_to_visualize = min(num_samples, total_samples)
         
         # 随机选择要可视化的样本索引
         vis_indices = np.random.choice(total_samples, num_to_visualize, replace=False)
+        
+        # 保存图像用于后续返回
+        figures = []
         
         for i, idx in enumerate(vis_indices):
             signal = signals[idx]
@@ -783,14 +823,20 @@ class Predictor:
             plt.legend()
             plt.grid(True)
             
-            # 保存图像
+            # 保存图像到文件
             save_path = os.path.join(result_dir, 'visualizations', f'sample_{idx}.png')
             plt.savefig(save_path)
+            
+            # 记录到TensorBoard
+            self.writer.add_figure(f'single_file/{file_basename}/samples/sample_{idx}', fig, 0)
+            
+            figures.append(fig)
             plt.close(fig)
         
         print(f"已随机可视化 {num_to_visualize} 个样本")
-    
-    def _plot_regression_single_file(self, predictions, targets, result_dir):
+        return figures
+
+    def _plot_regression_single_file(self, predictions, targets, result_dir, file_basename):
         """绘制回归图（仅当有ground truth时）"""
         fig = plt.figure(figsize=(8, 8))
         
@@ -816,9 +862,46 @@ class Predictor:
                      xy=(0.05, 0.95), xycoords='axes fraction',
                      bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
         
+        # 保存到文件
         save_path = os.path.join(result_dir, 'regression_plot.png')
         plt.savefig(save_path)
+        
+        # 记录到TensorBoard
+        self.writer.add_figure(f'single_file/{file_basename}/regression_plot', fig, 0)
+        
         plt.close(fig)
+        
+        # 绘制误差分布图并记录到TensorBoard
+        errors = predictions - targets
+        fig = plt.figure(figsize=(10, 6))
+        plt.hist(errors, bins=30, alpha=0.7)
+        plt.axvline(x=0, color='r', linestyle='--')
+        plt.title(f'Prediction Error Distribution - {file_basename}')
+        plt.xlabel('Error (BPM)')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        # 添加统计信息
+        plt.annotate(f'Mean Error: {np.mean(errors):.2f}\n'
+                     f'Std Error: {np.std(errors):.2f}', 
+                     xy=(0.05, 0.95), xycoords='axes fraction',
+                     bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
+        self.writer.add_figure(f'single_file/{file_basename}/error_distribution', fig, 0)
+        plt.close(fig)
+        
+        # 绘制相对误差散点图
+        rel_errors = np.abs(predictions - targets) / targets * 100  # 百分比
+        fig = plt.figure(figsize=(10, 6))
+        plt.scatter(targets, rel_errors, alpha=0.5)
+        plt.axhline(y=5, color='g', linestyle='--', label='5% Error')
+        plt.axhline(y=10, color='r', linestyle='--', label='10% Error')
+        plt.title(f'Relative Error vs Ground Truth - {file_basename}')
+        plt.xlabel('Ground Truth (BPM)')
+        plt.ylabel('Relative Error (%)')
+        plt.legend()
+        plt.grid(True)
+        self.writer.add_figure(f'single_file/{file_basename}/relative_error', fig, 0)
+        plt.close(fig)
+     
 
 
 def parse_args():
