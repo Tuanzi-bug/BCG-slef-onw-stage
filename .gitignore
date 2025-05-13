@@ -1,0 +1,60 @@
+# Ignore everything
+*
+**/.*
+
+# But not these files...
+!.gitignore
+!*.py
+!*.java
+!*.js
+!*.c
+!*.cpp
+!*.h
+!*.hpp
+!*.go
+!*.rs
+!*.ts
+!*.html
+!*.css
+!*.md
+!*.yaml
+!*.yml
+
+# ...even if they are in subdirectories
+!*/
+
+# Explicitly ignore these directories even if they match patterns above
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+.coverage
+htmlcov/
+env/
+venv/
+.venv/
+.env/
+node_modules/
+.idea/
+.vscode/
+build/
+dist/
+target/
+.gradle/
+
+# Ignore compiled files
+*.pyc
+*.class
+*.o
+*.so
+*.dll
+*.exe
+*.bin
+
+# Ignore logs and databases
+*.log
+*.sqlite
+*.db
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
