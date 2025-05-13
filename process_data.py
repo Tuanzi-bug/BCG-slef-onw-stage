@@ -203,6 +203,7 @@ class BCGDataLoader(Dataset):
         
         # 返回处理后的数据
         return {
+            'signal': signal,
             'segments': padded_segments,
             'positions': padded_positions,
             'pos_encoding': pos_encoding,

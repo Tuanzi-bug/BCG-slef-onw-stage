@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from pathlib import Path
 
 # 导入自定义模块
 from process_data import BCGDataLoader
@@ -72,6 +73,83 @@ def inference(model, sample_data, device):
         selected_peaks = non_max_suppression(selected_peaks, peak_probs[selected_valid_indices], min_distance=20)
     
     return selected_peaks, hr_pred
+
+
+class MultiSampleBCGDataset(torch.utils.data.Dataset):
+    """多样本BCG信号的数据集，用于推理"""
+    def __init__(self, signal_path, label_path=None, max_peaks=100, window_size=91, signal_length=6000):
+        """
+        初始化多样本数据集
+        
+        Args:
+            signal_path: BCG信号文件路径，包含(n, 6000)的数据
+            label_path: 可选的标签文件路径
+            max_peaks: 最大候选峰数量
+            window_size: 峰周围截取的窗口大小
+            signal_length: 信号总长度
+        """
+        # 创建一个BCGDataLoader来处理信号
+        self.processor = BCGDataLoader(
+            data_dir="",  # 不会被使用
+            label_dir="",  # 不会被使用
+            transform=True,
+            max_peaks=max_peaks,
+            window_size=window_size,
+            signal_length=signal_length
+        )
+        
+        # 加载信号
+        if signal_path.endswith('.npy'):
+            self.signals = np.load(signal_path)
+        else:
+            raise ValueError(f"Unsupported file format: {signal_path}")
+        
+        # 如果信号是1维的，转换为2维
+        if self.signals.ndim == 1:
+            self.signals = self.signals.reshape(1, -1)
+        
+        # 加载标签（如果提供）
+        self.labels = None
+        if label_path and os.path.exists(label_path):
+            if label_path.endswith('.npy'):
+                self.labels = np.load(label_path).squeeze()
+                if self.labels.ndim == 0:
+                    self.labels = np.array([self.labels])
+        
+        self.num_samples = self.signals.shape[0]
+        self.signal_length = signal_length
+        
+        # 预处理所有信号
+        self.processed_data = []
+        for i in range(self.num_samples):
+            signal = self.signals[i]
+            
+            # 确保信号长度正确
+            if len(signal) != signal_length:
+                if len(signal) > signal_length:
+                    signal = signal[:signal_length]
+                else:
+                    padded_signal = np.zeros(signal_length)
+                    padded_signal[:len(signal)] = signal
+                    signal = padded_signal
+            
+            # 处理信号
+            processed = self.processor.process_signal(signal)
+            
+            # 添加心率标签（如果有）
+            if self.labels is not None and i < len(self.labels):
+                processed['hr'] = float(self.labels[i])
+            else:
+                processed['hr'] = 0  # 没有标签时使用0
+            
+            self.processed_data.append(processed)
+    
+    def __len__(self):
+        return self.num_samples
+    
+    def __getitem__(self, idx):
+        return self.processed_data[idx]
+
 
 
 class SingleBCGDataset(torch.utils.data.Dataset):
@@ -366,10 +444,10 @@ class Predictor:
         
         return results
     
-    def run_single_inference(self, signal_path):
+    def run_single_signal_inference(self, signal_path):
         """对单个文件进行推理"""
         print(f"对单个文件进行推理: {signal_path}")
-        name=os.path.basename(signal_path).split('.')[0]
+        
         # 创建单样本数据集
         single_dataset = SingleBCGDataset(
             signal_path=signal_path,
@@ -400,12 +478,107 @@ class Predictor:
         plt.grid(True)
         
         # 保存图像
-        save_path = os.path.join(self.config.output_dir, name + '.png')
+        save_path = os.path.join(self.config.output_dir, 'single_sample_result.png')
         plt.savefig(save_path)
         print(f"结果图像已保存到: {save_path}")
         plt.close()
         
         return selected_peaks, hr_pred
+
+    def run_single_inference(self, signal_path, label_path=None, visualize_samples=None):
+        """对单个文件（包含多条信号）进行推理"""
+        print(f"对文件进行推理: {signal_path}")
+        
+        # 获取文件名（不含扩展名）作为结果目录名
+        file_basename = Path(signal_path).stem
+        result_dir = os.path.join(self.config.output_dir, file_basename)
+        os.makedirs(result_dir, exist_ok=True)
+        os.makedirs(os.path.join(result_dir, 'visualizations'), exist_ok=True)
+        
+        # 创建多样本数据集
+        dataset = MultiSampleBCGDataset(
+            signal_path=signal_path,
+            label_path=label_path,
+            max_peaks=self.config.max_peaks,
+            window_size=self.config.window_size,
+            signal_length=self.config.signal_length
+        )
+        
+        print(f"文件包含 {len(dataset)} 条信号")
+        
+        # 收集预测结果
+        all_hr_preds = []
+        all_hr_targets = []
+        all_peak_indices = []
+        all_signals = []
+        
+        # 开始推理
+        for i in tqdm(range(len(dataset)), desc="推理进度"):
+            sample_data = dataset[i]
+            
+            # 推理
+            selected_peaks, hr_pred = inference(self.model, sample_data, self.device)
+            
+            all_hr_preds.append(hr_pred)
+            all_hr_targets.append(sample_data['hr'])
+            all_peak_indices.append(selected_peaks)
+            all_signals.append(sample_data['signal'])
+        
+        # 转换为NumPy数组
+        all_hr_preds = np.array(all_hr_preds)
+        all_hr_targets = np.array(all_hr_targets)
+        
+        # 计算评估指标（如果有ground truth）
+        results = {}
+        if dataset.labels is not None:
+            results = self._calculate_metrics(all_hr_preds, all_hr_targets)
+            print("\n===== 推理结果 =====")
+            for key, value in results.items():
+                print(f"{key}: {value:.4f}")
+        else:
+            print("没有提供标签，无法计算评估指标")
+        
+        # 保存预测结果
+        self._save_single_file_predictions(
+            all_hr_preds, all_hr_targets, all_peak_indices, 
+            result_dir, file_basename
+        )
+        
+        # 随机选择样本进行可视化
+        num_vis = visualize_samples if visualize_samples else self.config.visualize_samples
+        self._visualize_single_file_samples(
+            all_signals, all_peak_indices, all_hr_preds, 
+            all_hr_targets, result_dir, num_vis
+        )
+        
+        # 如果有ground truth，绘制回归图
+        if dataset.labels is not None:
+            self._plot_regression_single_file(
+                all_hr_preds, all_hr_targets, result_dir
+            )
+        
+        # 保存结果摘要
+        summary = {
+            'file_path': signal_path,
+            'num_samples': len(dataset),
+            'predictions': {
+                'mean_hr': float(np.mean(all_hr_preds)),
+                'std_hr': float(np.std(all_hr_preds)),
+                'min_hr': float(np.min(all_hr_preds)),
+                'max_hr': float(np.max(all_hr_preds))
+            }
+        }
+        
+        if dataset.labels is not None:
+            summary['metrics'] = {k: float(v) for k, v in results.items()}
+        
+        summary_path = os.path.join(result_dir, 'summary.json')
+        with open(summary_path, 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        print(f"\n结果已保存到: {result_dir}")
+        
+        return all_hr_preds, all_peak_indices
     
     def _calculate_metrics(self, predictions, targets):
         """计算评估指标"""
@@ -482,7 +655,62 @@ class Predictor:
             json.dump(results, f, indent=2)
         
         print(f"预测结果已保存到: {output_path}")
-    
+
+    def _save_single_file_predictions(self, predictions, targets, peak_indices, 
+                                      result_dir, file_basename):
+        """保存单个文件的预测结果"""
+        results = []
+        for i in range(len(predictions)):
+            peaks = peak_indices[i]
+            if isinstance(peaks, np.ndarray):
+                peaks = peaks.tolist()
+            # For list values, ensure all elements are Python native types
+            elif isinstance(peaks, list):
+                peaks = [int(x) if isinstance(x, np.integer) else x for x in peaks]
+            result = {
+                'sample_idx': i,
+                'predicted_hr': float(predictions[i]),
+                'detected_peaks': peaks
+            }
+            
+            # 如果有ground truth，添加更多信息
+            if targets[i] != 0:  # 假设0表示没有标签
+                result.update({
+                    'target_hr': float(targets[i]),
+                    'error': float(predictions[i] - targets[i]),
+                    'relative_error': float(abs(predictions[i] - targets[i]) / targets[i] * 100)
+                })
+            
+            results.append(result)
+        
+        # 保存详细预测结果
+        output_path = os.path.join(result_dir, f'{file_basename}_predictions.json')
+        with open(output_path, 'w') as f:
+            json.dump(results, f, indent=2)
+        
+        # 保存简化的CSV格式（方便查看）
+        if targets[0] != 0:  # 有标签
+            csv_data = np.column_stack([
+                np.arange(len(predictions)),
+                predictions,
+                targets,
+                predictions - targets,
+                np.abs(predictions - targets) / targets * 100
+            ])
+            csv_header = 'sample_idx,predicted_hr,target_hr,error,relative_error(%)'
+        else:
+            csv_data = np.column_stack([
+                np.arange(len(predictions)),
+                predictions
+            ])
+            csv_header = 'sample_idx,predicted_hr'
+        
+        csv_path = os.path.join(result_dir, f'{file_basename}_predictions.csv')
+        np.savetxt(csv_path, csv_data, delimiter=',', header=csv_header, comments='')
+        
+        print(f"预测结果已保存到: {output_path}")
+
+
     def _visualize_samples(self, signals, peak_indices, predictions, targets):
         """可视化部分样本的峰检测结果"""
         num_samples = min(self.config.visualize_samples, len(signals))
@@ -497,14 +725,6 @@ class Predictor:
             peaks = peak_indices[idx]
             pred_hr = predictions[idx]
             target_hr = targets[idx]
-            
-            # # Convert peaks to list if it's numpy array
-            # if isinstance(peaks, np.ndarray):
-            #     peaks = peaks.tolist()
-            
-            # # Ensure peaks is a list
-            # if peaks is None:
-            #     peaks = []
 
             fig = plt.figure(figsize=(12, 6))
             
@@ -529,6 +749,76 @@ class Predictor:
     def close(self):
         """关闭TensorBoard写入器等资源"""
         self.writer.close()
+    
+    def _visualize_single_file_samples(self, signals, peak_indices, predictions, 
+                                       targets, result_dir, num_samples):
+        """可视化随机选择的样本"""
+        total_samples = len(signals)
+        num_to_visualize = min(num_samples, total_samples)
+        
+        # 随机选择要可视化的样本索引
+        vis_indices = np.random.choice(total_samples, num_to_visualize, replace=False)
+        
+        for i, idx in enumerate(vis_indices):
+            signal = signals[idx]
+            peaks = peak_indices[idx]
+            pred_hr = predictions[idx]
+            target_hr = targets[idx]
+            
+            fig = plt.figure(figsize=(12, 6))
+            
+            plt.plot(signal, label='BCG Signal')
+            if len(peaks) > 0:
+                plt.scatter(peaks, signal[peaks], color='red', s=50, label='Detected Peaks')
+            
+            # 根据是否有ground truth调整标题
+            if target_hr != 0:
+                title = f'Sample {idx}: Detected Peaks (Pred HR: {pred_hr:.1f}, True HR: {target_hr:.1f})'
+            else:
+                title = f'Sample {idx}: Detected Peaks (Predicted HR: {pred_hr:.1f} BPM)'
+            
+            plt.title(title)
+            plt.xlabel('Time (samples)')
+            plt.ylabel('Amplitude')
+            plt.legend()
+            plt.grid(True)
+            
+            # 保存图像
+            save_path = os.path.join(result_dir, 'visualizations', f'sample_{idx}.png')
+            plt.savefig(save_path)
+            plt.close(fig)
+        
+        print(f"已随机可视化 {num_to_visualize} 个样本")
+    
+    def _plot_regression_single_file(self, predictions, targets, result_dir):
+        """绘制回归图（仅当有ground truth时）"""
+        fig = plt.figure(figsize=(8, 8))
+        
+        plt.scatter(targets, predictions, alpha=0.5)
+        
+        min_val = min(min(targets), min(predictions))
+        max_val = max(max(targets), max(predictions))
+        plt.plot([min_val, max_val], [min_val, max_val], 'r--')
+        
+        plt.title('Heart Rate Prediction vs Ground Truth')
+        plt.xlabel('Ground Truth (BPM)')
+        plt.ylabel('Prediction (BPM)')
+        plt.grid(True)
+        
+        # 计算并显示指标
+        mae = mean_absolute_error(targets, predictions)
+        rmse = np.sqrt(mean_squared_error(targets, predictions))
+        r2 = 1 - (np.sum((targets - predictions) ** 2) / np.sum((targets - np.mean(targets)) ** 2))
+        
+        plt.annotate(f"MAE: {mae:.2f} BPM\n"
+                     f"RMSE: {rmse:.2f} BPM\n"
+                     f"R²: {r2:.3f}", 
+                     xy=(0.05, 0.95), xycoords='axes fraction',
+                     bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
+        
+        save_path = os.path.join(result_dir, 'regression_plot.png')
+        plt.savefig(save_path)
+        plt.close(fig)
 
 
 def parse_args():
@@ -589,13 +879,14 @@ def main():
     try:
         if args.single_file:
             import glob
-            single_files = glob.glob(os.path.join(args.single_file, '*.npy'))
-            if not single_files:
+            single_data_files = glob.glob(os.path.join(args.single_file, '*.npy')) if args.single_file else None
+            single_label_file = glob.glob(os.path.join(args.single_label, '*.npy')) if args.single_label else None
+            if not single_data_files:
                 print(f"没有找到文件: {args.single_file}")
                 return
             # 单文件推理模式
-            for single_file in single_files:
-                predictor.run_single_inference(single_file)
+            for (idx, single_file) in enumerate(single_data_files):
+                predictor.run_single_inference(single_file, single_label_file[idx] if single_label_file else None)
         else:
             # 批量推理模式
             results = predictor.run_inference()
