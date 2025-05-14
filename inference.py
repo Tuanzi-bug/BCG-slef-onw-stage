@@ -671,6 +671,9 @@ class Predictor:
     def _save_predictions(self, predictions, targets, peak_indices):
         """保存预测结果"""
         results = []
+        results.append({
+            'mae': float(np.mean(abs(predictions-targets))),
+        })
         for i in range(len(predictions)):
             peaks = peak_indices[i]
             if isinstance(peaks, np.ndarray):
@@ -914,9 +917,9 @@ def parse_args():
 
     parser.add_argument('--test_data_dir', type=str, default=os.path.join(DIR, "data_label","test","data",category), help='测试数据目录')
     parser.add_argument('--test_label_dir', type=str, default=os.path.join(DIR, "data_label","test","label",category), help='测试标签目录')
-    parser.add_argument('--model_path', type=str, default="results_2\\bcg_heartbeat_detector_final.pth",help='模型路径')
-    parser.add_argument('--output_dir', type=str, default='./inference_results_single', help='输出目录')
-    parser.add_argument('--log_dir', type=str, default='./inference_logs_single', help='日志目录')
+    parser.add_argument('--model_path', type=str, default="results\\best_model.pth",help='模型路径')
+    parser.add_argument('--output_dir', type=str, default='./inference_results_1', help='输出目录')
+    parser.add_argument('--log_dir', type=str, default='./inference_logs_1', help='日志目录')
     
     parser.add_argument('--batch_size', type=int, default=32, help='批次大小')
     parser.add_argument('--num_workers', type=int, default=4, help='数据加载线程数')

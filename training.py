@@ -580,7 +580,7 @@ class Trainer:
                           f"MAE: {val_metrics['mae']:.2f}, RMSE: {val_metrics['rmse']:.2f}")
                     
                     # 早停检查
-                    if val_metrics['loss'] < self.best_val_loss:
+                    if val_metrics['mae'] < self.best_val_mae:
                         self.best_val_loss = val_metrics['loss']
                         self.best_val_mae = val_metrics['mae']
                         

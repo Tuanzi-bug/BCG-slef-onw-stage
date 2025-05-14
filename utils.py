@@ -2,7 +2,7 @@ def Z_ScoreNormalization(x):
     import numpy as np
     out = (x - np.mean(x)) / np.std(x)
     return out
-def get_peaks_bestParameters(input, best_distance=2.5, best_prominence=0.35, best_rate=0.8):
+def get_peaks_bestParameters(input, best_distance=2.5, best_prominence=0.3, best_rate=0.67):
     """
     Find peaks in the input signal with simplified parameters.
 
