@@ -19,6 +19,7 @@
 !*.md
 !*.yaml
 !*.yml
+!*.ipynb
 
 # ...even if they are in subdirectories
 !*/
