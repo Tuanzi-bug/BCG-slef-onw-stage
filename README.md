@@ -12,3 +12,5 @@ python inference.py --model_path=./results/best_model.pth --output_dir=./inferen
 ```bash
 python inference.py --model_path=./results/best_model.pth --output_dir=./inference_win71_single_results --log_dir=./inference_win71_single_log --single_file=D:\Code\ResearchCode\BCG_Self_One\data_label\test\data\flatten --single_label=D:\Code\ResearchCode\BCG_Self_One\data_label\test\label\flatten
 ```
+
+* 用peaks_f 计算峰值位置的指标；
