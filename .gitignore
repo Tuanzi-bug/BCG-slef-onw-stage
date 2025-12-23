@@ -20,9 +20,23 @@
 !*.yaml
 !*.yml
 !*.ipynb
+!*.csv
+!*.tsv
+!*.json
+!*.txt
+!*.png
+!*.jpg
+!*.jpeg
+!*.svg
+!*.pdf
+
+# Allow results to be committed
+!results/
+!results/**
+
 
 # ...even if they are in subdirectories
-!*/
+!results/*
 
 # Explicitly ignore these directories even if they match patterns above
 __pycache__/
