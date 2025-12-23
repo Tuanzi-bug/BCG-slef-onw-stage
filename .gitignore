@@ -33,6 +33,11 @@
 # Allow results to be committed
 !results/
 !results/**
+!inference_win71_results/
+!inference_win71_results/**
+!results_2/
+!results_2/**
+
 
 
 # ...even if they are in subdirectories
