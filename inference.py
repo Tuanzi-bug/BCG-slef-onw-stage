@@ -912,17 +912,17 @@ def parse_args():
     parser = argparse.ArgumentParser(description='BCG心跳检测推理脚本')
     
     # DIR for default paths
-    DIR = "D:\\Code\\ResearchCode\\BCG_Self_One"
+    DIR = "/Users/yay/Desktop/deepLearning/BCG-slef-onw-stage/"
     category = "flatten"
 
     parser.add_argument('--test_data_dir', type=str, default=os.path.join(DIR, "data_label","test","data",category), help='测试数据目录')
     parser.add_argument('--test_label_dir', type=str, default=os.path.join(DIR, "data_label","test","label",category), help='测试标签目录')
-    parser.add_argument('--model_path', type=str, default="results\\best_model.pth",help='模型路径')
+    parser.add_argument('--model_path', type=str, default="results/best_model.pth",help='模型路径')
     parser.add_argument('--output_dir', type=str, default='./inference_results_1', help='输出目录')
     parser.add_argument('--log_dir', type=str, default='./inference_logs_1', help='日志目录')
     
     parser.add_argument('--batch_size', type=int, default=32, help='批次大小')
-    parser.add_argument('--num_workers', type=int, default=4, help='数据加载线程数')
+    parser.add_argument('--num_workers', type=int, default=0, help='数据加载线程数（Mac建议设置为0）')
     
     parser.add_argument('--visualize_samples', type=int, default=10, help='可视化样本数量')
     parser.add_argument('--no_save_predictions', action='store_true', help='不保存预测结果')
