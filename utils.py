@@ -295,4 +295,9 @@ def calculate_bcg_metrics(peak_indices, fs=100):
     diff_rr = np.diff(rr_intervals)
     rmssd = np.sqrt(np.mean(diff_rr**2))
     
-    return mean_rr, sdnn, rmssd
+    return {
+        "Mean_RR_ms": round(mean_rr, 2),
+        "SDNN_ms": round(sdnn, 2),
+        "RMSSD_ms": round(rmssd, 2),
+        "BPM_from_MeanRR": round(60000 / mean_rr, 2) # 根据平均间期估算的 BPM
+    }
