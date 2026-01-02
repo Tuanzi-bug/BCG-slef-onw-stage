@@ -10,7 +10,7 @@ python inference.py --model_path=./results/best_model.pth --output_dir=./inferen
 ```
 单个文件推理
 ```bash
-python inference.py --model_path=./results/best_model.pth --output_dir=./inference_win71_single_results --log_dir=./inference_win71_single_log --single_file=D:\Code\ResearchCode\BCG_Self_One\data_label\test\data\flatten --single_label=D:\Code\ResearchCode\BCG_Self_One\data_label\test\label\flatten
+python inference.py --model_path=./results/best_model.pth --output_dir=./inference_win71_single_results --log_dir=./inference_win71_single_log --single_file=./data_label/test/data/flatten --single_label=./data_label/test/label/flatten --no_gpu
 ```
 
 * 用peaks_f 计算峰值位置的指标；

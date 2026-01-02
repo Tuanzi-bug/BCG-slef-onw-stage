@@ -915,8 +915,8 @@ def parse_args():
     DIR = "/Users/yay/Desktop/deepLearning/BCG-slef-onw-stage/"
     category = "flatten"
 
-    parser.add_argument('--test_data_dir', type=str, default=os.path.join(DIR, "data_label","test","data",category), help='测试数据目录')
-    parser.add_argument('--test_label_dir', type=str, default=os.path.join(DIR, "data_label","test","label",category), help='测试标签目录')
+    parser.add_argument('--test_data_dir', type=str, default=os.path.join(DIR, "data_label","test_6000","data",category), help='测试数据目录')
+    parser.add_argument('--test_label_dir', type=str, default=os.path.join(DIR, "data_label","test_6000","label",category), help='测试标签目录')
     parser.add_argument('--model_path', type=str, default="results/best_model.pth",help='模型路径')
     parser.add_argument('--output_dir', type=str, default='./inference_results_1', help='输出目录')
     parser.add_argument('--log_dir', type=str, default='./inference_logs_1', help='日志目录')
