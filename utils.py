@@ -5,7 +5,7 @@ def Z_ScoreNormalization(x):
     import numpy as np
     out = (x - np.mean(x)) / np.std(x)
     return out
-def get_peaks_bestParameters(input, best_distance=2.5, best_prominence=0.3, best_rate=0.67):
+def get_peaks_bestParameters(input, best_distance=1.0, best_prominence=0.53, best_rate=1.0):
     """
     Find peaks in the input signal with simplified parameters.
 
@@ -301,3 +301,38 @@ def calculate_bcg_metrics(peak_indices, fs=100):
         "RMSSD_ms": round(rmssd, 2),
         "BPM_from_MeanRR": round(60000 / mean_rr, 2) # 根据平均间期估算的 BPM
     }
+
+
+def compt_B2B_rate_in_window(HB_locs_in_window, time_window_size):
+    temp_beat_loc_1 = HB_locs_in_window[:-1]
+    temp_beat_loc_2 = HB_locs_in_window[1:]
+    temp_beat_loc_1 = np.array(temp_beat_loc_1)
+    temp_beat_loc_2 = np.array(temp_beat_loc_2)
+    # time_diff_inv = 100. / (temp_beat_loc_2 - temp_beat_loc_1)
+    HB_rate_in_window = time_window_size / np.mean(temp_beat_loc_2 - temp_beat_loc_1)
+    return HB_rate_in_window
+
+def cmpt_HB_rate(HB_locs, time_sequence, time_window_size, method):
+    HB_rate = np.zeros(len(time_sequence))
+
+    temp_HB_locs_all = []
+    for time_scan in range((time_sequence[0] + time_window_size), time_sequence[-1] + 1):
+        temp_HB_locs1 = [
+            i
+            for i in HB_locs
+            if ((i >= (time_scan - time_window_size + 1)) & (i <= time_scan))
+        ]
+        temp_HB_locs = np.unique(temp_HB_locs1)
+        temp_HB_locs_all.append(temp_HB_locs)
+        temp_numb_beats = len(temp_HB_locs) - 1
+
+        if temp_numb_beats > 0:
+            if method == "mean_beats":
+                temp_window_length = (temp_HB_locs[-1] - temp_HB_locs[0] + 1) / 100
+                HB_rate[time_scan] = temp_numb_beats * 60 / temp_window_length
+            elif method == "B2B":
+                # print("B2B",time_scan)
+                HB_rate[time_scan-6000] = compt_B2B_rate_in_window(
+                    temp_HB_locs, time_window_size
+                )
+    return HB_rate

@@ -13,4 +13,13 @@ python inference.py --model_path=./results/best_model.pth --output_dir=./inferen
 python inference.py --model_path=./results/best_model.pth --output_dir=./inference_win71_single_results --log_dir=./inference_win71_single_log --single_file=./data_label/test/data/flatten --single_label=./data_label/test/label/flatten --no_gpu
 ```
 
+```bash
+python inference.py --model_path=./results/best_model.pth --output_dir=./inference_older_results --log_dir=./inference_older_log --test_data_dir=./data_label/test/data/older --test_label_dir=./data_label/test/label/older  --no_gpu
+```
+
+```bash
+python inference.py --model_path=./results/best_model.pth --output_dir=./inference_older_results --log_dir=./inference_older_log --single_file=./data_label/test/data/older --single_label=./data_label/test/label/older  --no_gpu
+```
+
 * 用peaks_f 计算峰值位置的指标；
+
