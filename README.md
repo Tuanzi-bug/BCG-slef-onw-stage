@@ -1,5 +1,10 @@
 # BCG 心跳检测算法说明
 
+GitHub 地址：
+
+- 代码仓库：[Tuanzi-bug/BCG-slef-onw-stage](https://github.com/Tuanzi-bug/BCG-slef-onw-stage)
+- 论文仓库：[Tuanzi-bug/Weakly-Supervised-Learning](https://github.com/Tuanzi-bug/Weakly-Supervised-Learning)，目前是 private，需要有访问权限才能打开。
+
 这个项目主要用于 BCG（ballistocardiogram，心冲击图）信号的心率和心跳峰检测。代码会先从原始 BCG 信号中找出候选峰，再截取每个候选峰附近的一小段信号，最后用模型判断候选峰的概率，并给出心率预测结果。
 
 下面的说明统一按 `window_size=91` 来写，对应现有模型目录 `./results_2` 里的配置和权重文件。
