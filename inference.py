@@ -511,6 +511,7 @@ class Predictor:
         all_hr_targets = []
         all_peak_indices = []
         all_signals = []
+        all_peak_probs = []  # 收集峰值概率
         
         # 记录推理开始时间
         start_time = time.time()
@@ -519,6 +520,15 @@ class Predictor:
         for i in tqdm(range(len(dataset)), desc="推理进度"):
             sample_data = dataset[i]
             
+            # 获取峰值概率
+            segments = torch.FloatTensor(sample_data['segments']).unsqueeze(0).to(self.device)
+            positions = torch.FloatTensor(sample_data['positions']).unsqueeze(0).to(self.device)
+            mask = torch.FloatTensor(sample_data['mask']).unsqueeze(0).to(self.device)
+            
+            with torch.no_grad():
+                peak_probs, _ = self.model(segments, positions, mask)
+            peak_probs_np = peak_probs.squeeze(0).cpu().numpy()
+            
             # 推理
             selected_peaks, hr_pred = inference(self.model, sample_data, self.device)
             
@@ -526,6 +536,7 @@ class Predictor:
             all_hr_targets.append(sample_data['hr'])
             all_peak_indices.append(selected_peaks)
             all_signals.append(sample_data['signal'])
+            all_peak_probs.append(peak_probs_np)  # 保存峰值概率
         
         # 计算推理时间
         inference_time = time.time() - start_time
@@ -562,6 +573,9 @@ class Predictor:
             all_hr_preds, all_hr_targets, all_peak_indices, 
             result_dir, file_basename
         )
+        
+        # 保存峰值概率数据
+        self._save_peak_probabilities(all_peak_probs, result_dir, file_basename)
         
         # 随机选择样本进行可视化
         num_vis = visualize_samples if visualize_samples else self.config.visualize_samples
@@ -904,7 +918,50 @@ class Predictor:
         plt.grid(True)
         self.writer.add_figure(f'single_file/{file_basename}/relative_error', fig, 0)
         plt.close(fig)
-     
+    
+    def _save_peak_probabilities(self, peak_probs_list, result_dir, file_basename):
+        """保存所有样本的峰值概率数据
+        
+        Args:
+            peak_probs_list: 所有样本的峰值概率列表
+            result_dir: 结果保存目录
+            file_basename: 文件基础名称
+        """
+        # 保存为numpy格式
+        peak_probs_array = np.array(peak_probs_list)
+        npy_path = os.path.join(result_dir, f'{file_basename}_peak_probabilities.npy')
+        np.save(npy_path, peak_probs_array)
+        print(f"峰值概率数据已保存到: {npy_path}")
+        
+        # 同时保存为JSON格式（便于查看和分析）
+        json_data = []
+        for i, probs in enumerate(peak_probs_list):
+            # 过滤掉padding的零值，只保存有效概率
+            valid_probs = probs[probs > 0].tolist()
+            json_data.append({
+                'sample_idx': i,
+                'num_valid_peaks': len(valid_probs),
+                'peak_probabilities': valid_probs,
+                'statistics': {
+                    'mean': float(np.mean(valid_probs)) if len(valid_probs) > 0 else 0.0,
+                    'std': float(np.std(valid_probs)) if len(valid_probs) > 0 else 0.0,
+                    'min': float(np.min(valid_probs)) if len(valid_probs) > 0 else 0.0,
+                    'max': float(np.max(valid_probs)) if len(valid_probs) > 0 else 0.0
+                }
+            })
+        
+        json_path = os.path.join(result_dir, f'{file_basename}_peak_probabilities.json')
+        with open(json_path, 'w') as f:
+            json.dump(json_data, f, indent=2)
+        print(f"峰值概率JSON已保存到: {json_path}")
+        
+        # # 记录统计信息到TensorBoard
+        # all_valid_probs = np.concatenate([probs[probs > 0] for probs in peak_probs_list])
+        # if len(all_valid_probs) > 0:
+        #     self.writer.add_scalar(f'single_file/{file_basename}/peak_probs/mean', np.mean(all_valid_probs), 0)
+        #     self.writer.add_scalar(f'single_file/{file_basename}/peak_probs/std', np.std(all_valid_probs), 0)
+        #     self.writer.add_scalar(f'single_file/{file_basename}/peak_probs/min', np.min(all_valid_probs), 0)
+        #     self.writer.add_scalar(f'single_file/{file_basename}/peak_probs/max', np.max(all_valid_probs), 0)
 
 
 def parse_args():
