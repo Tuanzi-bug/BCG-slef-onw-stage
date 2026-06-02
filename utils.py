@@ -2,7 +2,7 @@ def Z_ScoreNormalization(x):
     import numpy as np
     out = (x - np.mean(x)) / np.std(x)
     return out
-def get_peaks_bestParameters(input, best_distance=2.5, best_prominence=0.3, best_rate=0.67):
+def get_peaks_bestParameters(input, best_distance=1.0, best_prominence=0.3, best_rate=1):
     """
     Find peaks in the input signal with simplified parameters.
 
@@ -33,6 +33,6 @@ def get_peaks_bestParameters(input, best_distance=2.5, best_prominence=0.3, best
     ppeaks = peaks[pp]
     # print(int(len(ppeaks)), int(6000 / int(len(ppeaks))))
     # 根据大概的心跳点间隔进行寻找峰值点
-    pppeaks = signal.find_peaks(input, height=0, distance=int(6000 / int(len(ppeaks))) * best_rate, prominence=0.5)[0]
+    pppeaks = signal.find_peaks(input, height=0, distance=40)[0]
     # pppeaks = delete_close(pppeaks, input)
     return pppeaks

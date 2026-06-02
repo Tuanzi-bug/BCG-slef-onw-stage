@@ -648,7 +648,7 @@ def parse_args():
     
     # 数据参数
     parser.add_argument('--batch_size', type=int, default=32, help='批次大小')
-    parser.add_argument('--max_peaks', type=int, default=130, help='最大候选峰数量')
+    parser.add_argument('--max_peaks', type=int, default=150, help='最大候选峰数量')
     parser.add_argument('--window_size', type=int, default=91, help='峰窗口大小')
     parser.add_argument('--signal_length', type=int, default=6000, help='信号长度')
     parser.add_argument('--num_workers', type=int, default=4, help='数据加载线程数')
